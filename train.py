@@ -6,7 +6,7 @@ import os
 from datasets import load_dataset
 from huggingface_hub import HfApi
 from utils import tokenize, get_data_collator, print_trainable_parameters
-from losses import loss_token_ce
+from losses import loss_token_ce, KDTrainer
 
 api = HfApi()
 try:
@@ -25,11 +25,6 @@ parser.add_argument("--output_dir", type=str, help="output directory (under chec
 args = parser.parse_args()
 
 os.makedirs("checkpoints", exist_ok=True)
-LOSS_DICT = {
-    'token_ce': loss_token_ce, 
-    'kd': None,
-    'steer_kd': None
-}
 
 
 def main():
@@ -81,15 +76,30 @@ def main():
         learning_rate=5e-4,
     )
 
-    trainer = Seq2SeqTrainer(
-        model=lora_model,
-        processing_class=tokenizer,
-        args=train_args,
-        data_collator=get_data_collator(tokenizer),
-        compute_loss_func=LOSS_DICT[args.loss],
-        train_dataset=tokenized_train,
-        eval_dataset=tokenized_test,
-    )
+    if(args.loss == "token_ce"):
+        trainer = Seq2SeqTrainer(
+            model=lora_model,
+            processing_class=tokenizer,
+            args=train_args,
+            data_collator=get_data_collator(tokenizer),
+            compute_loss_func=loss_token_ce,
+            train_dataset=tokenized_train,
+            eval_dataset=tokenized_test,
+        )
+    elif(args.loss == "kd"):
+        teacher_model_id = "meta-llama/Meta-Llama-3.1-8B-Instruct"
+        teacher_model = AutoModelForCausalLM.from_pretrained(teacher_model_id, device_map="auto")
+        trainer = KDTrainer(
+            model=lora_model,
+            teacher_model = teacher_model,
+            processing_class=tokenizer,
+            args=train_args,
+            data_collator=get_data_collator(tokenizer),
+            train_dataset=tokenized_train,
+            eval_dataset=tokenized_test,
+        )
+    else:
+        raise NotImplementedError('The model type you have inputted is not yet implemented.')
 
     print('Training...')
     trainer.train()
