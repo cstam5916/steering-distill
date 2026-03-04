@@ -1,9 +1,15 @@
 import os
 import re
 import torch
-from datasets import load_dataset
+from tqdm.auto import tqdm
+from datasets import Dataset, load_dataset
 from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
-from peft import PeftModel
+from transformers.utils import logging
+from transformers.pipelines.pt_utils import KeyDataset
+from peft import AutoPeftModelForCausalLM
+import sys
+
+logging.set_verbosity_error()
 
 def accuracy_eval(outputs, targets, device=None):
     pat = re.compile(r'(?<!\w)[\$]?(\d+(?:,\d{3})*(?:\.\d+)?)\D*$')
@@ -28,43 +34,47 @@ def main():
     ds = load_dataset("openai/gsm8k", "main")
 
     model_id = "meta-llama/Llama-3.2-1B-Instruct"
-    base_model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto", device_map="auto")
-
-    checkpoint_dir = "checkpoints/no-distil/checkpoint-4675"
-    lora_model = PeftModel.from_pretrained(base_model, checkpoint_dir)
+    checkpoint_dirs = [f"checkpoints/no-distil/checkpoint-{num}" for num in [935, 1870, 2805, 3740, 4675]]
 
     tokenizer = AutoTokenizer.from_pretrained(model_id)
     tokenizer.padding_side = 'left'
     tokenizer.pad_token = tokenizer.eos_token   # enable batching
 
-    print("Loading model, creating pipeline...")
-    pipe = pipeline(
-        "text-generation",
-        model=lora_model,
-        tokenizer=tokenizer,
-        torch_dtype=torch.bfloat16,
-        device_map="auto",
-    )
+    results = []
+    for checkpoint_dir in checkpoint_dirs:
+        print(f'Testing {checkpoint_dir}')
+        lora_model = AutoPeftModelForCausalLM.from_pretrained(checkpoint_dir)
+        pipe = pipeline(
+            "text-generation",
+            model=lora_model,
+            tokenizer=tokenizer,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+        )
 
-    n = len(ds['test'])
-    train_queries = ds["test"][:n]["question"]
-    train_targets = ds["test"][:n]["answer"]
+        n = len(ds['test'])
+        train_queries = ds["test"][:n]["question"]
+        train_targets = ds["test"][:n]["answer"]
 
-    dataset_messages = [
-        [
-            {"role": "system", "content": "Answer math questions step-by-step. End your response by clearly stating your final answer."},
-            {"role": "user", "content": q},
+        dataset_messages = [
+            [
+                {"role": "system", "content": "Answer math questions step-by-step. End your response by clearly stating your final answer."},
+                {"role": "user", "content": q},
+            ]
+            for q in train_queries
         ]
-        for q in train_queries
-    ]
 
-    print("Forward pass (batched)...")
-    outputs = pipe(
-        dataset_messages,
-        batch_size=8,
-    )
+        print('Forward Pass...')
+        outputs = pipe(dataset_messages, batch_size=8)
 
-    print(f"Correct Answers: {accuracy_eval(outputs, train_targets, device=None)} out of {n}")
+        result_str = f"{checkpoint_dir} - Correct Answers: {accuracy_eval(outputs, train_targets, device=None)} out of {n}"
+        print(result_str)
+        results.append(result_str)
+        with open("checkpoints/no-distil/results.txt", "w") as f:
+            f.write("\n".join(results))
+    print(results)
+    with open("checkpoints/no-distil/results.txt", "w") as f:
+        f.write("\n".join(results))
 
 if __name__ == "__main__":
     main()
