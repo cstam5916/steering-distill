@@ -30,7 +30,7 @@ def main():
     model_id = "meta-llama/Llama-3.2-1B-Instruct"
     base_model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto", device_map="auto")
 
-    checkpoint_dir = "no-distil/checkpoint-935"
+    checkpoint_dir = "checkpoints/no-distil/checkpoint-4675"
     lora_model = PeftModel.from_pretrained(base_model, checkpoint_dir)
 
     tokenizer = AutoTokenizer.from_pretrained(model_id)

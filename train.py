@@ -1,9 +1,12 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer, Seq2SeqTrainer, Seq2SeqTrainingArguments
 from peft import LoraConfig, get_peft_model
 import torch
+import argparse
+import os
 from datasets import load_dataset
 from huggingface_hub import HfApi
 from utils import tokenize, get_data_collator, print_trainable_parameters
+from losses import loss_token_ce
 
 api = HfApi()
 try:
@@ -16,6 +19,17 @@ except Exception as e:
 device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
 print(f"Using {device} device")
 
+parser = argparse.ArgumentParser(description='Training GNN')
+parser.add_argument("--loss", type=str, default="token_ce", choices=["token_ce", "kd", "steer_kd"], help="loss function")
+parser.add_argument("--output_dir", type=str, help="output directory (under checkpoints)")
+args = parser.parse_args()
+
+os.makedirs("checkpoints", exist_ok=True)
+LOSS_DICT = {
+    'token_ce': loss_token_ce, 
+    'kd': None,
+    'steer_kd': None
+}
 
 
 def main():
@@ -52,8 +66,8 @@ def main():
     lora_model = get_peft_model(model, config)
     print_trainable_parameters(lora_model)
 
-    args = Seq2SeqTrainingArguments(
-        output_dir='no-distil',
+    train_args = Seq2SeqTrainingArguments(
+        output_dir=f'checkpoints/{args.output_dir}',
         per_device_train_batch_size=1,
         per_device_eval_batch_size=1,
         eval_strategy="epoch",
@@ -70,8 +84,9 @@ def main():
     trainer = Seq2SeqTrainer(
         model=lora_model,
         processing_class=tokenizer,
-        args=args,
+        args=train_args,
         data_collator=get_data_collator(tokenizer),
+        compute_loss_func=LOSS_DICT[args.loss],
         train_dataset=tokenized_train,
         eval_dataset=tokenized_test,
     )

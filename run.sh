@@ -7,4 +7,4 @@
 #SBATCH -o outLog
 #SBATCH -e errLog
 
-python -m train
+python -m train --loss "token_ce" --output_dir "no-distil-2" 
