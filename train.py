@@ -9,6 +9,7 @@ from utils import tokenize, get_data_collator, print_trainable_parameters
 from losses import loss_token_ce, KDTrainer
 
 api = HfApi()
+login(token=os.environ["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"])
 try:
     api.whoami()
 except Exception as e:
@@ -22,6 +23,7 @@ print(f"Using {device} device")
 parser = argparse.ArgumentParser(description='Training GNN')
 parser.add_argument("--loss", type=str, default="token_ce", choices=["token_ce", "kd", "steer_kd"], help="loss function")
 parser.add_argument("--output_dir", type=str, help="output directory (under checkpoints)")
+parser.add_argument("--batch_size", type=int, default=4, help="batch size")
 args = parser.parse_args()
 
 os.makedirs("checkpoints", exist_ok=True)
@@ -63,8 +65,8 @@ def main():
 
     train_args = Seq2SeqTrainingArguments(
         output_dir=f'checkpoints/{args.output_dir}',
-        per_device_train_batch_size=1,
-        per_device_eval_batch_size=1,
+        per_device_train_batch_size=args.batch_size,
+        per_device_eval_batch_size=args.batch_size,
         eval_strategy="epoch",
         save_strategy="epoch",
         logging_strategy="epoch",
@@ -86,6 +88,7 @@ def main():
             train_dataset=tokenized_train,
             eval_dataset=tokenized_test,
         )
+
     elif(args.loss == "kd"):
         teacher_model_id = "meta-llama/Meta-Llama-3.1-8B-Instruct"
         teacher_model = AutoModelForCausalLM.from_pretrained(teacher_model_id, device_map="auto")

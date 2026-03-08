@@ -29,22 +29,23 @@ def loss_kd(inputs, labels, student_logits, teacher):
     teacher_inputs = {k: v for k, v in inputs.items() if k != "labels"}
     with torch.no_grad():
         teacher_logits = teacher(**teacher_inputs).logits
-        # next-token alignment + mask (matches CE convention)
-        s = (student_logits[..., :-1, :] / T)
-        t = (teacher_logits[..., :-1, :] / T)
-        y = labels[..., 1:]
+        
+    # next-token alignment + mask (matches CE convention)
+    s = (student_logits[..., :-1, :] / T)
+    t = (teacher_logits[..., :-1, :] / T)
+    y = labels[..., 1:]
 
-        mask = y.ne(-100)  # [B, T-1]
+    mask = y.ne(-100)  # [B, T-1]
 
-        # compute KL per token then mean over active tokens
-        log_p_s = F.log_softmax(s, dim=-1)
-        p_t = F.softmax(t, dim=-1)
+    # compute KL per token then mean over active tokens
+    log_p_s = F.log_softmax(s, dim=-1)
+    p_t = F.softmax(t, dim=-1)
 
-        kl = F.kl_div(log_p_s, p_t, reduction="none").sum(dim=-1)  # [B, T-1]
-        kl = kl.masked_fill(~mask, 0.0)
+    kl = F.kl_div(log_p_s, p_t, reduction="none").sum(dim=-1)  # [B, T-1]
+    kl = kl.masked_fill(~mask, 0.0)
 
-        denom = mask.sum().clamp_min(1)
-        return (kl.sum() / denom) * (T * T)
+    denom = mask.sum().clamp_min(1)
+    return (kl.sum() / denom) * (T * T)
 
 class KDTrainer(Seq2SeqTrainer):
     def __init__(self, *args, teacher_model=None,  **kwargs):

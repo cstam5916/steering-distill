@@ -34,7 +34,7 @@ def main():
     ds = load_dataset("openai/gsm8k", "main")
 
     model_id = "meta-llama/Llama-3.2-1B-Instruct"
-    checkpoint_dirs = [f"checkpoints/no-distil/checkpoint-{num}" for num in [935, 1870, 2805, 3740, 4675]]
+    checkpoint_dirs = [f"checkpoints/first-kd/checkpoint-{num}" for num in [234, 468, 702, 936, 1170]]
 
     tokenizer = AutoTokenizer.from_pretrained(model_id)
     tokenizer.padding_side = 'left'

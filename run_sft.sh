@@ -6,8 +6,8 @@
 #SBATCH --gres=gpu:2
 #SBATCH -o KDoutLog
 #SBATCH -e KDerrLog
-#SBATCH --time=30:00:00
+#SBATCH --time=16:00:00
 
-# python -m train --loss "token_ce" --output_dir "no-distil-2" 
+python -m train --loss "token_ce" --output_dir "sft_batched" --batch_size 16
 
-python -m train --loss "kd" --output_dir "first-kd" --batch_size 4
+# python -m train --loss "kd" --output_dir "first-kd" 
