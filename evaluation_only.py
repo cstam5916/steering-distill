@@ -33,6 +33,7 @@ def main():
     print("Loading dataset...")
     ds = load_dataset("openai/gsm8k", "main")
 
+    dir_name='sft'
     model_id = "meta-llama/Llama-3.2-1B-Instruct"
     checkpoint_dirs = [f"checkpoints/first-kd/checkpoint-{num}" for num in [234, 468, 702, 936, 1170]]
 
@@ -70,10 +71,10 @@ def main():
         result_str = f"{checkpoint_dir} - Correct Answers: {accuracy_eval(outputs, train_targets, device=None)} out of {n}"
         print(result_str)
         results.append(result_str)
-        with open("checkpoints/no-distil/results.txt", "w") as f:
+        with open(f"checkpoints/{dir_name}/results.txt", "w") as f:
             f.write("\n".join(results))
     print(results)
-    with open("checkpoints/no-distil/results.txt", "w") as f:
+    with open(f"checkpoints/{dir_name}/results.txt", "w") as f:
         f.write("\n".join(results))
 
 if __name__ == "__main__":

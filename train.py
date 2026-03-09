@@ -75,7 +75,7 @@ def main():
         weight_decay=0.1,
         warmup_steps=1_000,
         lr_scheduler_type="cosine",
-        learning_rate=5e-4,
+        learning_rate=1e-4,
     )
 
     if(args.loss == "token_ce"):
