@@ -4,12 +4,13 @@ import torch
 import argparse
 import os
 from datasets import load_dataset
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, login
 from utils import tokenize, get_data_collator, print_trainable_parameters
-from losses import loss_token_ce, KDTrainer
+from losses import loss_token_ce, KDTrainer, SteeredKDTrainer
 
 api = HfApi()
-login(token=os.environ["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"])
+token = os.getenv("HF_TOKEN")
+login(token=token)
 try:
     api.whoami()
 except Exception as e:
@@ -101,8 +102,21 @@ def main():
             train_dataset=tokenized_train,
             eval_dataset=tokenized_test,
         )
-    else:
-        raise NotImplementedError('The model type you have inputted is not yet implemented.')
+    elif(args.loss == "steer_kd"):
+        teacher_model_id = "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
+        teacher_model = AutoModelForCausalLM.from_pretrained(teacher_model_id, device_map="auto")
+        trainer = SteeredKDTrainer(
+            model=lora_model,
+            teacher_model=teacher_model,
+            v_teacher=torch.randn(teacher_model.model.config.hidden_size, device=model.device, dtype=model.dtype),
+            l_t=10,
+            l_s=10,
+            processing_class=tokenizer,
+            args=train_args,
+            data_collator=get_data_collator(tokenizer),
+            train_dataset=tokenized_train,
+            eval_dataset=tokenized_test,
+        )
 
     print('Training...')
     trainer.train()

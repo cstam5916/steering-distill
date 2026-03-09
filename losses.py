@@ -68,14 +68,6 @@ class KDTrainer(Seq2SeqTrainer):
         else:
             return loss
 
-class SteeringProjector(nn.Module):
-    def __init__(self, teacher_dim, student_dim):
-        super().__init__()
-        self.proj = nn.Linear(teacher_dim, student_dim, bias=False)
-
-    def forward(self, teacher_vec):
-        return self.proj(teacher_vec)
-
 class SteeredKDTrainer(Seq2SeqTrainer):
     def __init__(self, *args, teacher_model, v_teacher, l_t, l_s, temperature=2.0, alpha=1.0, **kwargs):
         """
@@ -88,6 +80,7 @@ class SteeredKDTrainer(Seq2SeqTrainer):
         self.teacher_model = teacher_model.eval() # Teacher model should never require gradients
         for p in self.teacher_model.parameters():
             p.requires_grad_(False)
+        self.v_teacher = v_teacher
         self.l_t = l_t # Steering layer num for teacher
         self.l_s = l_s # Steering layer num for student
         self.temperature = temperature # temperature (higher temp makes softmaxes more uniform)
@@ -95,8 +88,8 @@ class SteeredKDTrainer(Seq2SeqTrainer):
 
         teacher_dim = v_teacher.shape[0] # dimensionality of the teacher's latent space
         student_dim = self.model.config.hidden_size # dimensionality of the student's latent space
-        self.projector = nn.Linear(teacher_dim, student_dim, bias=False) # learnable linear projection layer
-        self.register_buffer("v_teacher", v_teacher) # steering vec will be saved/loaded with teacher model
+        self.projector = torch.nn.Linear(teacher_dim, student_dim, bias=False).to(self.teacher_model.device, self.teacher_model.dtype) # learnable linear projection layer
+        self.teacher_model.register_buffer("v_teacher", v_teacher) # steering vec will be saved/loaded with teacher model
 
     def make_hook(self, mode="teacher", coeff=1.0, token_position="last"):
         def hook(module, inputs, output):
@@ -105,7 +98,6 @@ class SteeredKDTrainer(Seq2SeqTrainer):
                 v_steer = self.projector(self.v_teacher.to(hidden.device, hidden.dtype)) # Project teacher steering vector into student hidden dimension
             else:
                 v_steer = self.v_teacher.to(hidden.device, hidden.dtype) # Use teacher steering vector directly
-
             v_steer = coeff * v_steer  # optional scaling
 
             if token_position == "last":  # apply steering vector only to the most recent token
@@ -120,7 +112,7 @@ class SteeredKDTrainer(Seq2SeqTrainer):
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         teacher_layer = self.teacher_model.model.layers[self.l_t]
-        student_layer = model.model.layers[self.l_s]
+        student_layer = model.model.model.layers[self.l_s]
 
         # -------------------------
         # First pass: with steering
