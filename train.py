@@ -71,7 +71,7 @@ def main():
         save_strategy="epoch",
         logging_strategy="epoch",
         gradient_accumulation_steps=8,
-        num_train_epochs=5,
+        num_train_epochs=10,
         weight_decay=0.1,
         warmup_steps=1_000,
         lr_scheduler_type="cosine",
@@ -90,7 +90,7 @@ def main():
         )
 
     elif(args.loss == "kd"):
-        teacher_model_id = "meta-llama/Meta-Llama-3.1-8B-Instruct"
+        teacher_model_id = "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
         teacher_model = AutoModelForCausalLM.from_pretrained(teacher_model_id, device_map="auto")
         trainer = KDTrainer(
             model=lora_model,
