@@ -56,7 +56,7 @@ def main():
             device_map="auto",
         )
 
-    n = len(ds['test']) // 2
+    n = len(ds['test'])
     train_queries = ds["test"][:n]["question"]
     train_targets = ds["test"][:n]["answer"]
 
