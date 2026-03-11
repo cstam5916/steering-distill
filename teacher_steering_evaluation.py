@@ -40,7 +40,7 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side='left')
     tokenizer.pad_token = tokenizer.eos_token
 
-    sae, _, _ = SAE.from_pretrained(
+    sae = SAE.from_pretrained(
         release="andreuka18/deepseek-r1-distill-llama-8b-lmsys-openthoughts",  # check sae_lens for exact release name
         sae_id="blocks.19.hook_resid_post"               # layer 19, residual stream post
     ).to(device=device, dtype=model.dtype)
@@ -54,14 +54,25 @@ def main():
             tokenizer=tokenizer,
             torch_dtype=torch.bfloat16,
             device_map="auto",
+            max_new_tokens=3000
         )
 
-    n = len(ds['test'])
+    n =  len(ds['test'])
     train_queries = ds["test"][:n]["question"]
     train_targets = ds["test"][:n]["answer"]
+    dataset_messages = [
+        [
+            {"role": "system", "content": "Answer math questions step-by-step. End your response by clearly stating your final answer."},
+            {"role": "user", "content": q},
+        ]
+        for q in train_queries
+    ]
+
+    dir_name = 'steering_test'
+    os.makedirs(f"checkpoints/{dir_name}", exist_ok=True)
+    results = []
 
     for feature_idx in feature_indices:
-        dir_name = f'Steering vec {feature_idx}'
         steering_vec = sae.W_dec[feature_idx].clone()
         max_activation = get_max_activation(model, tokenizer, sae, feature_idx, 
                                     list(ds['train']['question'])[:100],
@@ -69,14 +80,6 @@ def main():
 
         hook_fn = get_clamp_hook(steering_vec, max_activation=max_activation, strength=strength)
         handle = pipe.model.model.layers[19].register_forward_hook(hook_fn)
-
-        dataset_messages = [
-            [
-                {"role": "system", "content": "Answer math questions step-by-step. End your response by clearly stating your final answer."},
-                {"role": "user", "content": q},
-            ]
-            for q in train_queries
-        ]
 
         try:
             print('Forward Pass...')
@@ -90,8 +93,6 @@ def main():
         with open(f"checkpoints/{dir_name}/results.txt", "w") as f:
             f.write("\n".join(results))
         print(results)
-        with open(f"checkpoints/{dir_name}/results.txt", "w") as f:
-            f.write("\n".join(results))
 
 if __name__ == "__main__":
     main()
