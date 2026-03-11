@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 from transformers import Seq2SeqTrainer
+from steering_utils import *
 
 def loss_token_ce(outputs, labels, num_items_in_batch=None):
     # Shift the logits and labels such that they are aligned for next-token comparison
@@ -91,34 +92,19 @@ class SteeredKDTrainer(Seq2SeqTrainer):
         self.projector = torch.nn.Linear(teacher_dim, student_dim, bias=False).to(self.teacher_model.device, self.teacher_model.dtype) # learnable linear projection layer
         self.teacher_model.register_buffer("v_teacher", v_teacher) # steering vec will be saved/loaded with teacher model
 
-    def make_hook(self, mode="teacher", coeff=1.0, token_position="last"):
-        def hook(module, inputs, output):
-            hidden = output
-            if mode == "student":
-                v_steer = self.projector(self.v_teacher.to(hidden.device, hidden.dtype)) # Project teacher steering vector into student hidden dimension
-            else:
-                v_steer = self.v_teacher.to(hidden.device, hidden.dtype) # Use teacher steering vector directly
-            v_steer = coeff * v_steer  # optional scaling
-
-            if token_position == "last":  # apply steering vector only to the most recent token
-                hidden = hidden.clone()
-                hidden[:, -1, :] += v_steer
-            elif token_position == "all": # apply steering vector to all tokens
-                hidden = hidden + v_steer.view(1, 1, -1)
-            else:
-                raise ValueError("token_position must be 'last' or 'all'")
-            return hidden
-        return hook
-
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        labels = inputs.pop("labels")
+
         teacher_layer = self.teacher_model.model.layers[self.l_t]
         student_layer = model.model.model.layers[self.l_s]
 
         # -------------------------
         # First pass: with steering
         # -------------------------
-        teacher_handle = teacher_layer.register_forward_hook(self.make_hook(mode="teacher"))
-        student_handle = student_layer.register_forward_hook(self.make_hook(mode="student"))
+        teacher_handle = teacher_layer.register_forward_hook(get_clamp_hook(direction=self.v_teacher,max_activation=, strength=2))
+
+        v_student = model.projector(self.v_teacher)
+        student_handle = student_layer.register_forward_hook(get_clamp_hook(direction=v_student,max_activation=1, strength=2))
         # handles are registered hook functions that get called during the forward pass
         # essentially, they add the steering vectors
 

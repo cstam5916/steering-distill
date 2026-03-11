@@ -105,12 +105,14 @@ def main():
     elif(args.loss == "steer_kd"):
         teacher_model_id = "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
         teacher_model = AutoModelForCausalLM.from_pretrained(teacher_model_id, device_map="auto")
+        lora_model.projector = torch.nn.Linear(teacher_model.config.hidden_size, lora_model.config.hidden_size)
+        
         trainer = SteeredKDTrainer(
             model=lora_model,
             teacher_model=teacher_model,
             v_teacher=torch.randn(teacher_model.model.config.hidden_size, device=model.device, dtype=model.dtype),
-            l_t=10,
-            l_s=10,
+            l_t=19,
+            l_s=19,
             processing_class=tokenizer,
             args=train_args,
             data_collator=get_data_collator(tokenizer),
