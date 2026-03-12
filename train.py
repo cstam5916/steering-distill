@@ -56,60 +56,38 @@ def main():
         load_from_cache_file=False
     )
 
-    config = LoraConfig(
-        r=32,
-        lora_alpha=32,
-        target_modules=["q_proj", "v_proj"],
-        lora_dropout=0.1,
-        bias="none",
-    )
-    lora_model = get_peft_model(model, config)
-    print_trainable_parameters(lora_model)
-
-    train_args = Seq2SeqTrainingArguments(
-        output_dir=f'checkpoints/{args.output_dir}',
-        per_device_train_batch_size=args.batch_size,
-        per_device_eval_batch_size=args.batch_size,
-        eval_strategy="epoch",
-        save_strategy="epoch",
-        logging_strategy="epoch",
-        gradient_accumulation_steps=4,
-        num_train_epochs=20,
-        weight_decay=0.1,
-        warmup_steps=1_000,
-        lr_scheduler_type="cosine",
-        learning_rate=1e-4,
-    )
-
-    if(args.loss == "token_ce"):
-        trainer = Seq2SeqTrainer(
-            model=lora_model,
-            processing_class=tokenizer,
-            args=train_args,
-            data_collator=get_data_collator(tokenizer),
-            compute_loss_func=loss_token_ce,
-            train_dataset=tokenized_train,
-            eval_dataset=tokenized_test,
-        )
-
-    elif(args.loss == "kd"):
+    if(args.loss == "steer_kd"):
         teacher_model_id = "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
         teacher_model = AutoModelForCausalLM.from_pretrained(teacher_model_id, device_map="auto")
-        trainer = KDTrainer(
-            model=lora_model,
-            teacher_model = teacher_model,
-            processing_class=tokenizer,
-            args=train_args,
-            data_collator=get_data_collator(tokenizer),
-            train_dataset=tokenized_train,
-            eval_dataset=tokenized_test,
-        )
-    elif(args.loss == "steer_kd"):
-        teacher_model_id = "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
-        teacher_model = AutoModelForCausalLM.from_pretrained(teacher_model_id, device_map="auto")
-        lora_model.projector = torch.nn.Linear(teacher_model.config.hidden_size, lora_model.config.hidden_size).to(device=device, dtype=model.dtype)
+        model.projector = torch.nn.Linear(teacher_model.config.hidden_size, model.config.hidden_size).to(device=device, dtype=model.dtype)
         v_steer, max_activation = torch.load('steering_vectors/vec_48026.pt')
         v_steer = v_steer.to(device=device, dtype=model.dtype)
+
+        config = LoraConfig(
+            r=32,
+            lora_alpha=32,
+            target_modules=["q_proj", "v_proj"],
+            modules_to_save=["projector"],
+            lora_dropout=0.1,
+            bias="none",
+        )
+        lora_model = get_peft_model(model, config)
+        print_trainable_parameters(lora_model)
+
+        train_args = Seq2SeqTrainingArguments(
+            output_dir=f'checkpoints/{args.output_dir}',
+            per_device_train_batch_size=args.batch_size,
+            per_device_eval_batch_size=args.batch_size,
+            eval_strategy="epoch",
+            save_strategy="epoch",
+            logging_strategy="epoch",
+            gradient_accumulation_steps=4,
+            num_train_epochs=20,
+            weight_decay=0.1,
+            warmup_steps=1_000,
+            lr_scheduler_type="cosine",
+            learning_rate=1e-4,
+        )
 
         trainer = SteeredKDTrainer(
             model=lora_model,
@@ -124,6 +102,55 @@ def main():
             train_dataset=tokenized_train,
             eval_dataset=tokenized_test,
         )
+    else:
+        config = LoraConfig(
+            r=32,
+            lora_alpha=32,
+            target_modules=["q_proj", "v_proj"],
+            lora_dropout=0.1,
+            bias="none",
+        )
+        lora_model = get_peft_model(model, config)
+        print_trainable_parameters(lora_model)
+
+        train_args = Seq2SeqTrainingArguments(
+            output_dir=f'checkpoints/{args.output_dir}',
+            per_device_train_batch_size=args.batch_size,
+            per_device_eval_batch_size=args.batch_size,
+            eval_strategy="epoch",
+            save_strategy="epoch",
+            logging_strategy="epoch",
+            gradient_accumulation_steps=4,
+            num_train_epochs=20,
+            weight_decay=0.1,
+            warmup_steps=1_000,
+            lr_scheduler_type="cosine",
+            learning_rate=1e-4,
+        )
+
+        if(args.loss == "token_ce"):
+            trainer = Seq2SeqTrainer(
+                model=lora_model,
+                processing_class=tokenizer,
+                args=train_args,
+                data_collator=get_data_collator(tokenizer),
+                compute_loss_func=loss_token_ce,
+                train_dataset=tokenized_train,
+                eval_dataset=tokenized_test,
+            )
+
+        elif(args.loss == "kd"):
+            teacher_model_id = "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
+            teacher_model = AutoModelForCausalLM.from_pretrained(teacher_model_id, device_map="auto")
+            trainer = KDTrainer(
+                model=lora_model,
+                teacher_model = teacher_model,
+                processing_class=tokenizer,
+                args=train_args,
+                data_collator=get_data_collator(tokenizer),
+                train_dataset=tokenized_train,
+                eval_dataset=tokenized_test,
+            )
 
     print('Training...')
     trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
