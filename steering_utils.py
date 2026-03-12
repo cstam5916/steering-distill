@@ -7,8 +7,6 @@ Repository: https://github.com/AIRI-Institute/SAE-Reasoning/tree/main
 '''
 
 import torch
-from typing import List, Tuple, Callable
-from torch import Tensor
 
 def get_max_activation(model, tokenizer, sae, feature_idx, prompts, device, hook_layer=19):
     max_act = 0.0
@@ -33,60 +31,20 @@ def get_max_activation(model, tokenizer, sae, feature_idx, prompts, device, hook
 
     return max_act
 
-from typing import List, Tuple, Callable
-from torch import Tensor
+def get_clamp_hook(vec, max_activation=1.0, strength=1.0):
+    direction = vec / torch.linalg.norm(vec)
+    scaled = max_activation * strength
+    d_cast = None
 
-def add_hooks(
-    module_forward_pre_hooks: List[Tuple[torch.nn.Module, Callable]],
-    module_forward_hooks: List[Tuple[torch.nn.Module, Callable]],
-    **kwargs
-):
-    """
-    Context manager for temporarily adding forward hooks to a model.
-
-    Parameters
-    ----------
-    module_forward_pre_hooks
-        A list of pairs: (module, fnc) The function will be registered as a
-            forward pre hook on the module
-    module_forward_hooks
-        A list of pairs: (module, fnc) The function will be registered as a
-            forward hook on the module
-    """
-    try:
-        handles = []
-        for module, hook in module_forward_pre_hooks:
-            partial_hook = functools.partial(hook, **kwargs)
-            handles.append(module.register_forward_pre_hook(partial_hook))
-        for module, hook in module_forward_hooks:
-            partial_hook = functools.partial(hook, **kwargs)
-            handles.append(module.register_forward_hook(partial_hook))
-        yield
-    finally:
-        for h in handles:
-            h.remove()
-
-def get_clamp_hook(
-    direction: Tensor,
-    max_activation: float = 1.0,
-    strength: float = 1.0
-):
     def hook_fn(module, input, output):
-        nonlocal direction
-        if torch.is_tensor(output):
-            activations = output.clone()
-        else:
-            activations = output[0].clone()
-        
-        direction = direction / torch.norm(direction)
-        direction = direction.type_as(activations)
-        proj_magnitude = torch.sum(activations * direction, dim=-1, keepdim=True)
-        orthogonal_component = activations - proj_magnitude * direction
-
-        clamped = orthogonal_component + direction * max_activation * strength
-
-        if torch.is_tensor(output):
-            return clamped
-        else:
-            return (clamped,) + output[1:] if len(output) > 1 else (clamped,)
+        nonlocal d_cast
+        hidden = output[0] if isinstance(output, tuple) else output
+        if d_cast is None:
+            d_cast = direction.to(device=hidden.device, dtype=hidden.dtype)
+        proj = torch.sum(hidden * d_cast, dim=-1, keepdim=True)
+        hidden = hidden.clone()
+        hidden = hidden - proj * d_cast + scaled * d_cast
+        if isinstance(output, tuple):
+            return (hidden,) + output[1:]
+        return hidden
     return hook_fn

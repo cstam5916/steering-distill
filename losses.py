@@ -70,7 +70,7 @@ class KDTrainer(Seq2SeqTrainer):
             return loss
 
 class SteeredKDTrainer(Seq2SeqTrainer):
-    def __init__(self, *args, teacher_model, v_teacher, l_t, l_s, temperature=2.0, alpha=1.0, **kwargs):
+    def __init__(self, *args, teacher_model, v_teacher, max_activation, l_t, l_s, temperature=2.0, alpha=1.0, **kwargs):
         """
         teacher_model: frozen teacher model
         v_teacher: teacher steering vector, shape [teacher_hidden_dim]
@@ -82,6 +82,7 @@ class SteeredKDTrainer(Seq2SeqTrainer):
         for p in self.teacher_model.parameters():
             p.requires_grad_(False)
         self.v_teacher = v_teacher
+        self.max_activation = max_activation
         self.l_t = l_t # Steering layer num for teacher
         self.l_s = l_s # Steering layer num for student
         self.temperature = temperature # temperature (higher temp makes softmaxes more uniform)
@@ -89,7 +90,6 @@ class SteeredKDTrainer(Seq2SeqTrainer):
 
         teacher_dim = v_teacher.shape[0] # dimensionality of the teacher's latent space
         student_dim = self.model.config.hidden_size # dimensionality of the student's latent space
-        self.projector = torch.nn.Linear(teacher_dim, student_dim, bias=False).to(self.teacher_model.device, self.teacher_model.dtype) # learnable linear projection layer
         self.teacher_model.register_buffer("v_teacher", v_teacher) # steering vec will be saved/loaded with teacher model
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
@@ -101,7 +101,7 @@ class SteeredKDTrainer(Seq2SeqTrainer):
         # -------------------------
         # First pass: with steering
         # -------------------------
-        teacher_handle = teacher_layer.register_forward_hook(get_clamp_hook(direction=self.v_teacher,max_activation=, strength=2))
+        teacher_handle = teacher_layer.register_forward_hook(get_clamp_hook(direction=self.v_teacher,max_activation=self.max_activation, strength=2))
 
         v_student = model.projector(self.v_teacher)
         student_handle = student_layer.register_forward_hook(get_clamp_hook(direction=v_student,max_activation=1, strength=2))
