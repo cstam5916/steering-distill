@@ -12,6 +12,6 @@
 
 # python -m train --loss "kd" --output_dir "deepseek-kd" --batch_size 8
 
-python -m train --loss "steer_kd" --output_dir "steering-final" --batch_size 4
+python -m train --loss "steer_kd" --output_dir "steering-final" --batch_size 4 --resume_from_checkpoint "checkpoints/steering-final/checkpoint-4680"
 
 # python -m teacher_steering_evaluation

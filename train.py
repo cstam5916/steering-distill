@@ -24,6 +24,8 @@ print(f"Using {device} device")
 parser = argparse.ArgumentParser(description='Training GNN')
 parser.add_argument("--loss", type=str, default="token_ce", choices=["token_ce", "kd", "steer_kd"], help="loss function")
 parser.add_argument("--output_dir", type=str, help="output directory (under checkpoints)")
+parser.add_argument("--resume_from_checkpoint", type=str, default=None, 
+                    help="Path to checkpoint dir to resume from")
 parser.add_argument("--batch_size", type=int, default=4, help="batch size")
 args = parser.parse_args()
 
@@ -72,7 +74,7 @@ def main():
         save_strategy="epoch",
         logging_strategy="epoch",
         gradient_accumulation_steps=4,
-        num_train_epochs=10,
+        num_train_epochs=20,
         weight_decay=0.1,
         warmup_steps=1_000,
         lr_scheduler_type="cosine",
@@ -124,7 +126,7 @@ def main():
         )
 
     print('Training...')
-    trainer.train()
+    trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
    
 
 if(__name__ == '__main__'):
