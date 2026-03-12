@@ -11,4 +11,7 @@
 # python -m train --loss "token_ce" --output_dir "no-distil-2" 
 
 # python -m train --loss "kd" --output_dir "deepseek-kd" --batch_size 8
-python -m teacher_steering_evaluation
+
+python -m train --loss "steer_kd" --output_dir "steering-final" --batch_size 4
+
+# python -m teacher_steering_evaluation

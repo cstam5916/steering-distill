@@ -71,7 +71,7 @@ def main():
         eval_strategy="epoch",
         save_strategy="epoch",
         logging_strategy="epoch",
-        gradient_accumulation_steps=8,
+        gradient_accumulation_steps=4,
         num_train_epochs=10,
         weight_decay=0.1,
         warmup_steps=1_000,
@@ -105,8 +105,9 @@ def main():
     elif(args.loss == "steer_kd"):
         teacher_model_id = "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
         teacher_model = AutoModelForCausalLM.from_pretrained(teacher_model_id, device_map="auto")
-        lora_model.projector = torch.nn.Linear(teacher_model.config.hidden_size, lora_model.config.hidden_size).to(device, dtype=model.type)
+        lora_model.projector = torch.nn.Linear(teacher_model.config.hidden_size, lora_model.config.hidden_size).to(device=device, dtype=model.dtype)
         v_steer, max_activation = torch.load('steering_vectors/vec_48026.pt')
+        v_steer = v_steer.to(device=device, dtype=model.dtype)
 
         trainer = SteeredKDTrainer(
             model=lora_model,
@@ -114,7 +115,7 @@ def main():
             v_teacher=v_steer,
             max_activation = max_activation,
             l_t=19,
-            l_s=19,
+            l_s=9,
             processing_class=tokenizer,
             args=train_args,
             data_collator=get_data_collator(tokenizer),

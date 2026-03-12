@@ -31,8 +31,8 @@ def get_max_activation(model, tokenizer, sae, feature_idx, prompts, device, hook
 
     return max_act
 
-def get_clamp_hook(vec, max_activation=1.0, strength=1.0):
-    direction = vec / torch.linalg.norm(vec)
+def get_clamp_hook(direction, max_activation=1.0, strength=1.0):
+    direction = direction / torch.linalg.norm(direction)
     scaled = max_activation * strength
     d_cast = None
 
