@@ -1,1 +1,6 @@
 checkpoints/
+run_private*
+*errLog
+*outLog
+outlogs
+validate_tokenization.ipynb

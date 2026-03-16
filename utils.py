@@ -1,7 +1,8 @@
 import torch
 
-def tokenize(element, tokenizer, is_eval=False):
-    prompt = "Answer the math question step-by-step. End your response by clearly stating your final answer."
+
+def tokenize(element, tokenizer):
+    prompt = "Answer math questions step-by-step. End your response by clearly stating your final answer."
     qs = element["question"]
     ans = element.get("answer", None)
     prompt_message = [
@@ -11,21 +12,52 @@ def tokenize(element, tokenizer, is_eval=False):
         ]
         for q in qs
     ]
-    tokens_prompt = tokenizer.apply_chat_template(prompt_message, tokenize=True, add_generation_prompt=True, return_dict=True)
-    if is_eval:
-        targets = [[-100]*len(ids) for ids in tokens_prompt["input_ids"]]
-        return {"input_ids": tokens_prompt["input_ids"], "labels": targets, "attention_mask": tokens_prompt["attention_mask"]}
-    else:
-        train_message = [
-            prompt_message[i] + [{"role": "assistant", "content": a}]
-            for i, a in enumerate(ans)
-        ]
-        tokens_train = tokenizer.apply_chat_template(train_message, tokenize=True, add_generation_prompt=False, return_dict=True)
-        targets = [
-            ([-100] * len(p)) + t[len(p):]
-            for p, t in zip(tokens_prompt["input_ids"], tokens_train["input_ids"])
-        ]
-        return {"input_ids": tokens_train["input_ids"], "labels": targets, "attention_mask": tokens_train["attention_mask"]}
+    tokens_prompt = tokenizer.apply_chat_template(
+        prompt_message, tokenize=True, add_generation_prompt=True, return_dict=True
+    )
+    
+    tokens_ans = tokenizer(
+        [a + tokenizer.eos_token for a in ans],
+        add_special_tokens=False,
+    )["input_ids"]
+
+    input_ids = [
+        p + a
+        for p, a in zip(tokens_prompt["input_ids"], tokens_ans)
+    ]
+    targets = [
+        [-100] * len(p) + a
+        for p, a in zip(tokens_prompt["input_ids"], tokens_ans)
+    ]
+    attention_mask = [[1] * len(ids) for ids in input_ids]
+    return {"input_ids": input_ids, "labels": targets, "attention_mask": attention_mask}
+
+# def tokenize(element, tokenizer, is_eval=False):
+#     prompt = "Answer the math question step-by-step. End your response by clearly stating your final answer."
+#     qs = element["question"]
+#     ans = element.get("answer", None)
+#     prompt_message = [
+#         [
+#             {"role": "system", "content": prompt},
+#             {"role": "user", "content": q},
+#         ]
+#         for q in qs
+#     ]
+#     tokens_prompt = tokenizer.apply_chat_template(prompt_message, tokenize=True, add_generation_prompt=True, return_dict=True)
+#     if is_eval:
+#         targets = [[-100]*len(ids) for ids in tokens_prompt["input_ids"]]
+#         return {"input_ids": tokens_prompt["input_ids"], "labels": targets, "attention_mask": tokens_prompt["attention_mask"]}
+#     else:
+#         train_message = [
+#             prompt_message[i] + [{"role": "assistant", "content": a}]
+#             for i, a in enumerate(ans)
+#         ]
+#         tokens_train = tokenizer.apply_chat_template(train_message, tokenize=True, add_generation_prompt=False, return_dict=True)
+#         targets = [
+#             ([-100] * len(p)) + t[len(p):]
+#             for p, t in zip(tokens_prompt["input_ids"], tokens_train["input_ids"])
+#         ]
+#         return {"input_ids": tokens_train["input_ids"], "labels": targets, "attention_mask": tokens_train["attention_mask"]}
 
 def get_data_collator(tokenizer):
     def data_collator(features):

@@ -1,4 +1,4 @@
-from transformers import AutoModelForCausalLM, AutoTokenizer, Seq2SeqTrainer, Seq2SeqTrainingArguments
+from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
 from peft import LoraConfig, get_peft_model
 import torch
 import argparse
@@ -45,14 +45,14 @@ def main():
         tokenize,
         batched=True,
         remove_columns=ds["train"].column_names,
-        fn_kwargs={"tokenizer":tokenizer, "is_eval":False},
+        fn_kwargs={"tokenizer":tokenizer},
         load_from_cache_file=False
     )
     tokenized_test = ds['test'].map(
         tokenize,
         batched=True,
         remove_columns=ds["test"].column_names,
-        fn_kwargs={"tokenizer":tokenizer, "is_eval":True},
+        fn_kwargs={"tokenizer":tokenizer},
         load_from_cache_file=False
     )
 
@@ -64,17 +64,17 @@ def main():
         v_steer = v_steer.to(device=device, dtype=model.dtype)
 
         config = LoraConfig(
-            r=32,
-            lora_alpha=32,
-            target_modules=["q_proj", "v_proj"],
-            modules_to_save=["projector"],
-            lora_dropout=0.1,
+            r=64,
+            lora_alpha=64,
+            target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+            lora_dropout=0.05,
             bias="none",
         )
+
         lora_model = get_peft_model(model, config)
         print_trainable_parameters(lora_model)
 
-        train_args = Seq2SeqTrainingArguments(
+        train_args = TrainingArguments(
             output_dir=f'checkpoints/{args.output_dir}',
             per_device_train_batch_size=args.batch_size,
             per_device_eval_batch_size=args.batch_size,
@@ -113,23 +113,24 @@ def main():
         lora_model = get_peft_model(model, config)
         print_trainable_parameters(lora_model)
 
-        train_args = Seq2SeqTrainingArguments(
-            output_dir=f'checkpoints/{args.output_dir}',
-            per_device_train_batch_size=args.batch_size,
-            per_device_eval_batch_size=args.batch_size,
-            eval_strategy="epoch",
-            save_strategy="epoch",
-            logging_strategy="epoch",
-            gradient_accumulation_steps=4,
-            num_train_epochs=50,
-            weight_decay=0.1,
-            warmup_steps=1_000,
-            lr_scheduler_type="cosine",
-            learning_rate=1e-4,
-        )
-
         if(args.loss == "token_ce"):
-            trainer = Seq2SeqTrainer(
+            train_args = TrainingArguments(
+                output_dir=f'checkpoints/{args.output_dir}',
+                per_device_train_batch_size=args.batch_size,
+                per_device_eval_batch_size=args.batch_size,
+                eval_strategy="epoch",
+                save_strategy="epoch",
+                logging_strategy="epoch",
+                gradient_accumulation_steps=8,
+                num_train_epochs=10,
+                weight_decay=0.01,
+                warmup_ratio=0.03,
+                lr_scheduler_type="cosine",
+                learning_rate=2e-4,
+                report_to=[]
+            )
+
+            trainer = Trainer(
                 model=lora_model,
                 processing_class=tokenizer,
                 args=train_args,
@@ -142,6 +143,24 @@ def main():
         elif(args.loss == "kd"):
             teacher_model_id = "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
             teacher_model = AutoModelForCausalLM.from_pretrained(teacher_model_id, device_map="auto")
+
+            train_args = TrainingArguments(
+                output_dir=f'checkpoints/{args.output_dir}',
+                per_device_train_batch_size=args.batch_size,
+                per_device_eval_batch_size=args.batch_size,
+                eval_strategy="epoch",
+                save_strategy="epoch",
+                logging_strategy="epoch",
+                gradient_accumulation_steps=4,
+                num_train_epochs=30, # More epochs for knowledge distillation than SFT
+                weight_decay=0.01,
+                warmup_ratio=0.03,
+                lr_scheduler_type="cosine",
+                learning_rate=2e-4,
+                report_to=[],
+                bf16=True # Lower precision might help with memory
+            )
+
             trainer = KDTrainer(
                 model=lora_model,
                 teacher_model = teacher_model,

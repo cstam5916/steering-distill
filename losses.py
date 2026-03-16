@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-from transformers import Seq2SeqTrainer
+from transformers import Trainer, Seq2SeqTrainer
 from steering_utils import *
 
 def loss_token_ce(outputs, labels, num_items_in_batch=None):
@@ -48,7 +48,7 @@ def loss_kd(inputs, labels, student_logits, teacher):
     denom = mask.sum().clamp_min(1)
     return (kl.sum() / denom) * (T * T)
 
-class KDTrainer(Seq2SeqTrainer):
+class KDTrainer(Trainer):
     def __init__(self, *args, teacher_model=None,  **kwargs):
         super().__init__(*args, **kwargs)
         self.teacher_model = teacher_model
@@ -69,7 +69,7 @@ class KDTrainer(Seq2SeqTrainer):
         else:
             return loss
 
-class SteeredKDTrainer(Seq2SeqTrainer):
+class SteeredKDTrainer(Trainer):
     def __init__(self, *args, teacher_model, v_teacher, max_activation, l_t, l_s, temperature=2.0, alpha=1.0, **kwargs):
         """
         teacher_model: frozen teacher model
